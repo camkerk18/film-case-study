@@ -1,0 +1,226 @@
+---
+title: "Case Study 1"
+author: "Abigail Ahlquist, RJ Burjek, Cameron Kerkemeyer, Aditya Singhdeo"
+date: "2023-10-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Loading in packages
+```{r}
+library(ggplot2) 
+library(dplyr) 
+library(faraway) 
+```
+<br>
+
+### Gathering Data and Initial Cleanups 
+
+```{r}
+movies = read.csv("movies.csv", header = TRUE)
+
+for (i in colnames(movies)) {
+  print(i)
+  print(length(unique(movies[[i]])))
+}
+
+movies2 = movies[,-c(4,7,9,14)]
+
+movies.full = lm(gross~., data=movies2)
+anova(movies.full)
+```
+Here we see that the `name` column contains responses that are far too unique to be kept in the model. We keep the `votes` column since it is not categorical. We also decided to remove the `name` and `writer` columns because the responses recorded in each are also too unique. 
+
+<br>
+
+### Testing Parameter Significance
+Testing `company`
+```{r}
+movies.red1 = movies2[,-c(2)]
+
+movies.mlr.red1 = lm(gross~., data=movies.red1)
+
+anova(movies.mlr.red1,movies.full)
+```
+The p-value here is equal to 0.6285, which is greater than our significance level 0.05, thus we can remove the `company` variable since it is not statistically significant.
+<br>
+
+Testing `star`
+```{r}
+movies.red2 = movies.red1[,-c(8)]
+
+movies.mlr.red2 = lm(gross~., data=movies.red2)
+
+anova(movies.mlr.red2,movies.mlr.red1)
+```
+The p-value here is equal to 0.9999, which is greater than our significance level 0.05, thus we can remove the `star` variable since it is not statistically significant.
+<br>
+
+Testing `country`
+```{r}
+movies.red3 = movies.red2[,-c(2)]
+
+movies.mlr.red3 = lm(gross~., data=movies.red3)
+
+anova(movies.mlr.red3,movies.mlr.red2)
+```
+The p-value here is equal to 0.02999, which is less than our significance level 0.05, thus we can not remove the `country` variable since it is statistically significant.
+<br>
+
+Testing `runtime`
+```{r}
+movies.red4 = movies.red2[,-c(6)]
+
+movies.mlr.red4 = lm(gross~., data=movies.red4)
+
+anova(movies.mlr.red4,movies.mlr.red2)
+```
+The p-value here is equal to 0.8759, which is greater than our significance level 0.05, thus we can remove the `runtime` variable since it is not statistically significant.
+
+Testing `year`
+```{r}
+movies.red5 = movies.red4[,-c(8)]
+
+movies.mlr.red5 = lm(gross~., data=movies.red5)
+
+anova(movies.mlr.red5,movies.mlr.red4)
+```
+The p-value here is equal to 2.189e-07, which is less than our significance level 0.05, thus we can remove the `year` variable since it is statistically significant.
+
+<br>
+
+### Final Model
+Our final chosen model contains the columns `budget`, `country`, `genre`, `rating`, `score`, `votes`, and `year`. This
+```{r}
+movies.red.final = lm(gross~., data=movies.red4)
+```
+
+
+
+### High Leverage Points
+```{r}
+movies.red.final.leverage = lm.influence(movies.red.final)$hat
+head(movies.red.final.leverage)
+
+n = dim(movies2)[1] 
+p = length(variable.names(movies.red.final)) 
+
+movies.leverages.high = movies.red.final.leverage[movies.red.final.leverage>2*p/n] 
+
+head(movies.leverages.high)
+
+halfnorm(movies.red.final.leverage, nlab = 6,  
+         labs = as.character(1:length(movies.red.final.leverage)),  
+         ylab = "Leverages") 
+
+movies.final.lev.high = sort(abs(movies.leverages.high), decreasing = TRUE) 
+head(movies.final.lev.high)
+
+IQR_y = IQR(movies2$gross) 
+
+QT1_y = quantile(movies2$gross, 0.25) 
+
+QT3_y = quantile(movies2$gross, 0.75) 
+
+lower_lim_y = QT1_y - IQR_y 
+
+upper_lim_y = QT3_y - IQR_y 
+
+vector_lim_y = c(lower_lim_y, upper_lim_y) 
+vector_lim_y 
+
+movies.highlev = movies2[movies.red.final.leverage>2*p/n,] 
+head(movies.highlev)
+
+movies.highlev_lower = movies.highlev[movies.highlev$gross < vector_lim_y[1],] 
+moviess.highlev_upper = movies.highlev[movies.highlev$gross > vector_lim_y[2],] 
+
+movies.highlev2 = rbind(movies.highlev_lower, moviess.highlev_upper) 
+head(movies.highlev2)
+```
+From the observations made here, we see that the model does indeed have many high leverage points.
+
+
+### Outliers
+```{r}
+movies.resid = rstudent(movies.red.final) 
+movies.resid.sorted = sort(abs(movies.resid), decreasing = TRUE)[1:10] 
+movies.resid.sorted 
+
+  
+
+bonferroni_cv = qt(0.05/(2*n), n-p-1) 
+bonferroni_cv 
+```
+Here we see that all residuals are outliers, as each is greater than the absolute value of the Bonferroni correction value that we found. 
+
+### Influential Observations 
+```{r}
+movies.cooks = cooks.distance(movies.red.final) 
+
+sort(movies.cooks, decreasing = TRUE)[1:10] 
+plot(movies.cooks) 
+
+halfnorm(movies.cooks, 6, labs = as.character(1:length(movies.cooks)), ylab = "Cook's Distances") 
+```
+Here we see in both plots that there are no observations above 1, and thus there are no high influential points. 
+<br>
+
+### Constant Variance
+```{r}
+plot(movies.red.final, which=1)
+```
+Here we see that the plot forms a cone shape, indicating that the variance of the residuals is not constant. 
+<br>
+
+### Checking Normality
+```{r}
+plot(movies.red.final, which=2)
+
+hist(movies.red.final$residuals)
+```
+Here we see that the histogram roughly reflects a normal distribution, but the QQ-plot confirms that the model is not normally distributed since the line is not straight
+<br>
+
+### Collinearity
+```{r}
+x = model.matrix(movies.red.final)[,-1]
+
+dim(x)
+
+x = x - matrix(apply(x,2, mean), 6820,88, byrow=TRUE)
+x = x / matrix(apply(x, 2, sd), 6820,88, byrow=TRUE)
+
+eigenvalues.x = eigen(t(x) %*% x)
+
+eigenvalues.x$val
+
+sqrt(eigenvalues.x$val[1]/eigenvalues.x$val[88])
+```
+Our resulting collinearity is equal 104.7887, and thus we have high collinearity.
+
+### Confidence Interval based on Data
+```{r}
+data_conf = sample_n(movies.red4, 2, replace = TRUE)
+
+data_conf
+predict.lm(movies.red.final, data_conf, interval="confidence")
+```
+Here we see that often times, the model does not accurately estimate the gross income correctly and does not include the true observed income in the confidence interval.
+
+
+### Prediction Interval with New Data
+```{r}
+data_pred = data.frame(budget = c(185000000, 14300000), country = c("USA", "USA"), genre = c("Action", "Action"),
+                      rating = c("PG-13","R"), score = c(7.8, 7.8), votes = c(738000, 484000), year = c(2022, 2022))
+
+predict.lm(movies.red.final, data_pred, interval="prediction")
+```
+The two movies chosen for the prediction interval were "The Batman" and "Everything Everywhere All at Once". Their true gross incomes are 772,245,583 and 141,129,020 respectively. From this, we see that the prediction interval for "The Batman" does not contain the true observed gross income, but the prediction interval for "Everything Everywhere All at Once" was does indeed contain the true observed gross income.
+
+<br>
+
+
